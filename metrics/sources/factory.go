@@ -27,8 +27,8 @@ import (
 type SourceFactory struct {
 }
 
-func (this *SourceFactory) Build(uri flags.Uri, customUris flags.Uris) (core.MetricsSourceProvider, core.MetricsSourceProvider, error) {
-	customProvider, _:= custom.NewCustomProvider(customUris)
+func (this *SourceFactory) Build(uri flags.Uri, lbNames string) (core.MetricsSourceProvider, core.MetricsSourceProvider, error) {
+	customProvider, _:= custom.NewCustomProvider(&uri.Val, lbNames)
 	switch uri.Key {
 	case "kubernetes":
 		provider, err := kubelet.NewKubeletProvider(&uri.Val)
@@ -41,11 +41,11 @@ func (this *SourceFactory) Build(uri flags.Uri, customUris flags.Uris) (core.Met
 	}
 }
 
-func (this *SourceFactory) BuildAll(uris flags.Uris, customUris flags.Uris) (core.MetricsSourceProvider, core.MetricsSourceProvider, error) {
+func (this *SourceFactory) BuildAll(uris flags.Uris, lbNames string) (core.MetricsSourceProvider, core.MetricsSourceProvider, error) {
 	if len(uris) != 1 {
 		return nil, nil, fmt.Errorf("Only one source is supported")
 	}
-	return this.Build(uris[0], customUris)
+	return this.Build(uris[0], lbNames)
 }
 
 func NewSourceFactory() *SourceFactory {

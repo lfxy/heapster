@@ -31,7 +31,78 @@ import (
 	"k8s.io/kubernetes/pkg/labels"
 )
 
+//add StoreToConfigmap
 
+type ConfigMapLister struct {
+	Indexer
+}
+
+// List lists all ReplicaSets in the store.
+// TODO: converge on the interface in pkg/client
+func (s *ConfigMapLister) List(selector labels.Selector) (ret []*api.ConfigMap, err error) {
+	for _, c := range s.Indexer.List() {
+		cm := c.(*api.ConfigMap)
+		if selector.Matches(labels.Set(cm.Labels)) {
+			ret = append(ret, cm)
+		}
+	}
+	return ret, nil
+}
+
+type ConfigMapNamespaceLister struct {
+	indexer   Indexer
+	namespace string
+}
+
+func (s ConfigMapNamespaceLister) List(selector labels.Selector) (ret []*api.ConfigMap, err error) {
+	if s.namespace == api.NamespaceAll {
+		for _, m := range s.indexer.List() {
+			cm := m.(*api.ConfigMap)
+			if selector.Matches(labels.Set(cm.Labels)) {
+				ret = append(ret, cm)
+			}
+		}
+		return ret, nil
+	}
+
+	key := &api.ConfigMap{ObjectMeta: api.ObjectMeta{Namespace: s.namespace}}
+	items, err := s.indexer.Index(NamespaceIndex, key)
+	if err != nil {
+		// Ignore error; do slow search without index.
+		glog.Warningf("can not retrieve list of objects using index : %v", err)
+		for _, m := range s.indexer.List() {
+			cm := m.(*api.ConfigMap)
+			if s.namespace == cm.Namespace && selector.Matches(labels.Set(cm.Labels)) {
+				ret = append(ret, cm)
+			}
+		}
+		return ret, nil
+	}
+	for _, m := range items {
+		cm := m.(*api.ConfigMap)
+		if selector.Matches(labels.Set(cm.Labels)) {
+			ret = append(ret, cm)
+		}
+	}
+	return ret, nil
+}
+
+func (s ConfigMapNamespaceLister) Get(name string) (*api.ConfigMap, error) {
+	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, errors.NewNotFound(api.Resource("configmap"), name)
+	}
+	return obj.(*api.ConfigMap), nil
+}
+
+func (s *ConfigMapLister) ConfigMaps(namespace string) ConfigMapNamespaceLister {
+	return ConfigMapNamespaceLister{s.Indexer, namespace}
+}
+
+//add StoreToConfigmap
 
 type StoreToIngressLister struct {
 	Indexer

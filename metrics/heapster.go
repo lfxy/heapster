@@ -58,7 +58,7 @@ var (
 	argAllowedUsers     = flag.String("allowed_users", "", "comma-separated list of allowed users")
 	argSources          flags.Uris
 	argSinks            flags.Uris
-	argCustoms          flags.Uris
+	lbNames				string
 	argHistoricalSource = flag.String("historical_source", "", "which source type to use for the historical API (should be exactly the same as one of the sink URIs), or empty to disable the historical API")
 )
 
@@ -66,7 +66,7 @@ func main() {
 	defer glog.Flush()
 	flag.Var(&argSources, "source", "source(s) to watch")
 	flag.Var(&argSinks, "sink", "external sink(s) that receive data")
-	flag.Var(&argCustoms, "custom", "custom metrics collect from")
+	flag.StringVar(&lbNames, "customsources", "", "types of custom metrics collect from")
 	flag.Parse()
 	setMaxProcs()
 	glog.Infof(strings.Join(os.Args, " "))
@@ -80,7 +80,7 @@ func main() {
 		glog.Fatal("Wrong number of sources specified")
 	}
 	sourceFactory := sources.NewSourceFactory()
-	sourceProvider, customProvider, err := sourceFactory.BuildAll(argSources, argCustoms)
+	sourceProvider, customProvider, err := sourceFactory.BuildAll(argSources, lbNames)
 	if err != nil {
 		glog.Fatalf("Failed to create source provide: %v", err)
 	}

@@ -10,10 +10,20 @@ import (
 	"k8s.io/heapster/metrics/sources/kubelet"
 )
 
-type CustomClient struct {
+type CustomClient interface {
+	GetCustomMetrics(host kubelet.Host) (*map[string]map[string][]interface{}, error)
+}
+
+type NginxCustomClient struct {
 	client		*http.Client
 	path		string
 	rawquery    string
+}
+
+type HaproxyCustomClient struct {
+	client		*http.Client
+	path		string
+	//rawquery    string
 }
 
 type ErrNotFound struct {
@@ -24,7 +34,8 @@ func (err *ErrNotFound) Error() string {
 	return fmt.Sprintf("%q not found", err.endpoint)
 }
 
-func (self *CustomClient) postRequestAndGetValue(client *http.Client, req *http.Request, value interface{}) error {
+//func (self *CustomClient) postRequestAndGetValue(client *http.Client, req *http.Request, value interface{}) error {
+func postRequestAndGetValue(client *http.Client, req *http.Request, value interface{}) error {
 	response, err := client.Do(req)
 	if err != nil {
 		return err
@@ -47,7 +58,7 @@ func (self *CustomClient) postRequestAndGetValue(client *http.Client, req *http.
 	return nil
 }
 
-func (self *CustomClient) GetCustomMetrics(host kubelet.Host) (*map[string]map[string][]interface{}, error) {
+func (self *NginxCustomClient) GetCustomMetrics(host kubelet.Host) (*map[string]map[string][]interface{}, error) {
 	url := url.URL{
 		Scheme:		"http",
 		Host:		fmt.Sprintf("%s:%d", host.IP, host.Port),
@@ -68,6 +79,31 @@ func (self *CustomClient) GetCustomMetrics(host kubelet.Host) (*map[string]map[s
 	if client == nil {
 		client = http.DefaultClient
 	}
-	err = self.postRequestAndGetValue(client, req, &custommetrics)
+	err = postRequestAndGetValue(client, req, &custommetrics)
+	return &custommetrics, err
+}
+
+func (self *HaproxyCustomClient) GetCustomMetrics(host kubelet.Host) (*map[string]map[string][]interface{}, error) {
+	url := url.URL{
+		Scheme:		"http",
+		Host:		fmt.Sprintf("%s:%d", host.IP, host.Port),
+		Path:		self.path,
+		//RawQuery:	self.rawquery,
+	}
+	/*if self.config != nil && self.config.EnableHttps {
+		url.Scheme = "https"
+	}*/
+
+	glog.V(2).Infof("czq kubelet_client.go, GetCustomMetrics url:%s", url.String())
+	req, err := http.NewRequest("GET", url.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	var custommetrics map[string]map[string][]interface{}
+	client := self.client
+	if client == nil {
+		client = http.DefaultClient
+	}
+	err = postRequestAndGetValue(client, req, &custommetrics)
 	return &custommetrics, err
 }
