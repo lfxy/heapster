@@ -87,6 +87,7 @@ func (self *UnitsType) String() string {
 type MetricValue struct {
 	IntValue   int64
 	FloatValue float32
+	CustomValue float64
 	MetricType MetricType
 	ValueType  ValueType
 }
@@ -129,6 +130,16 @@ type DataBatch struct {
 	Timestamp time.Time
 	// Should use key functions from ms_keys.go
 	MetricSets map[string]*MetricSet
+}
+
+type CustomMetricSet struct {
+	MetricValues map[string]MetricValue
+}
+
+type CustomDataBatch struct {
+	Timestamp time.Time
+	// Should use key functions from ms_keys.go
+	MetricSets   map[string]CustomMetricSet
 }
 
 // A place from where the metrics should be scraped.

@@ -31,6 +31,38 @@ import (
 	"k8s.io/kubernetes/pkg/labels"
 )
 
+
+
+type StoreToIngressLister struct {
+	Indexer
+}
+
+// Please note that selector is filtering among the pods that have gotten into
+// the store; there may have been some filtering that already happened before
+// that.
+// We explicitly don't return api.PodList, to avoid expensive allocations, which
+// in most cases are unnecessary.
+func (s *StoreToIngressLister) List() (ingresses []*extensions.Ingress, err error) {
+	for _, m := range s.Indexer.List() {
+		ingress := m.(*extensions.Ingress)
+		ingresses = append(ingresses, ingress)
+	}
+	return ingresses, nil
+}
+
+// Pods is taking baby steps to be more like the api in pkg/client
+//func (s *StoreToIngressLister) Ingresses(namespace string) storePodsNamespacer {
+	//return storePodsNamespacer{s.Indexer, namespace}
+//}
+
+func (s *StoreToIngressLister) Exists(ingress *extensions.Ingress) (bool, error) {
+	_, exists, err := s.Indexer.Get(ingress)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
 //  TODO: generate these classes and methods for all resources of interest using
 // a script.  Can use "go generate" once 1.4 is supported by all users.
 

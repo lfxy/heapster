@@ -21,29 +21,31 @@ import (
 	"k8s.io/heapster/metrics/core"
 	"k8s.io/heapster/metrics/sources/kubelet"
 	"k8s.io/heapster/metrics/sources/summary"
+	"k8s.io/heapster/metrics/sources/custom"
 )
 
 type SourceFactory struct {
 }
 
-func (this *SourceFactory) Build(uri flags.Uri) (core.MetricsSourceProvider, error) {
+func (this *SourceFactory) Build(uri flags.Uri, customUris flags.Uris) (core.MetricsSourceProvider, core.MetricsSourceProvider, error) {
+	customProvider, _:= custom.NewCustomProvider(customUris)
 	switch uri.Key {
 	case "kubernetes":
 		provider, err := kubelet.NewKubeletProvider(&uri.Val)
-		return provider, err
+		return provider, customProvider, err
 	case "kubernetes.summary_api":
 		provider, err := summary.NewSummaryProvider(&uri.Val)
-		return provider, err
+		return provider, customProvider,  err
 	default:
-		return nil, fmt.Errorf("Source not recognized: %s", uri.Key)
+		return nil, customProvider, fmt.Errorf("Source not recognized: %s", uri.Key)
 	}
 }
 
-func (this *SourceFactory) BuildAll(uris flags.Uris) (core.MetricsSourceProvider, error) {
+func (this *SourceFactory) BuildAll(uris flags.Uris, customUris flags.Uris) (core.MetricsSourceProvider, core.MetricsSourceProvider, error) {
 	if len(uris) != 1 {
-		return nil, fmt.Errorf("Only one source is supported")
+		return nil, nil, fmt.Errorf("Only one source is supported")
 	}
-	return this.Build(uris[0])
+	return this.Build(uris[0], customUris)
 }
 
 func NewSourceFactory() *SourceFactory {

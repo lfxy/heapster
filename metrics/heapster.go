@@ -44,6 +44,7 @@ import (
 	kube_client "k8s.io/kubernetes/pkg/client/unversioned"
 	"k8s.io/kubernetes/pkg/fields"
 	"k8s.io/kubernetes/pkg/healthz"
+	kube_extensions "k8s.io/kubernetes/pkg/apis/extensions"
 )
 
 var (
@@ -57,6 +58,7 @@ var (
 	argAllowedUsers     = flag.String("allowed_users", "", "comma-separated list of allowed users")
 	argSources          flags.Uris
 	argSinks            flags.Uris
+	argCustoms          flags.Uris
 	argHistoricalSource = flag.String("historical_source", "", "which source type to use for the historical API (should be exactly the same as one of the sink URIs), or empty to disable the historical API")
 )
 
@@ -64,6 +66,7 @@ func main() {
 	defer glog.Flush()
 	flag.Var(&argSources, "source", "source(s) to watch")
 	flag.Var(&argSinks, "sink", "external sink(s) that receive data")
+	flag.Var(&argCustoms, "custom", "custom metrics collect from")
 	flag.Parse()
 	setMaxProcs()
 	glog.Infof(strings.Join(os.Args, " "))
@@ -77,14 +80,14 @@ func main() {
 		glog.Fatal("Wrong number of sources specified")
 	}
 	sourceFactory := sources.NewSourceFactory()
-	sourceProvider, err := sourceFactory.BuildAll(argSources)
+	sourceProvider, customProvider, err := sourceFactory.BuildAll(argSources, argCustoms)
 	if err != nil {
 		glog.Fatalf("Failed to create source provide: %v", err)
 	}
-	sourceManager, err := sources.NewSourceManager(sourceProvider, sources.DefaultMetricsScrapeTimeout)
-	if err != nil {
-		glog.Fatalf("Failed to create source manager: %v", err)
-	}
+//	sourceManager, err := sources.NewSourceManager(sourceProvider, sources.DefaultMetricsScrapeTimeout)
+//	if err != nil {
+//		glog.Fatalf("Failed to create source manager: %v", err)
+//	}
 
 	// sinks
 	sinksFactory := sinks.NewSinkFactory()
@@ -136,6 +139,14 @@ func main() {
 	}
 	kubeClient := kube_client.NewOrDie(kubeConfig)
 
+	/*ingressLister, err := getIngressLister(kubeClient.ExtensionsClient)
+	if err != nil {
+		glog.Fatalf("Failed to create ingressLister: %v", err)
+	}
+	rcLister, err := getReplicationControllerLister(kubeClient)
+	if err != nil {
+		glog.Fatalf("Failed to create rcLister: %v", err)
+	}*/
 	podLister, err := getPodLister(kubeClient)
 	if err != nil {
 		glog.Fatalf("Failed to create podLister: %v", err)
@@ -144,6 +155,12 @@ func main() {
 	if err != nil {
 		glog.Fatalf("Failed to create nodeLister: %v", err)
 	}
+	//czq done 1
+	sourceManager, err := sources.NewSourceManager(sourceProvider, customProvider, sources.DefaultMetricsScrapeTimeout, podLister)
+	if err != nil {
+		glog.Fatalf("Failed to create source manager: %v", err)
+	}
+	//czq done 2
 
 	podBasedEnricher, err := processors.NewPodBasedEnricher(podLister)
 	if err != nil {
@@ -263,6 +280,24 @@ func getKubernetesAddress(args flags.Uris) (*url.URL, error) {
 		}
 	}
 	return nil, fmt.Errorf("No kubernetes source found.")
+}
+
+func getIngressLister(extensionsclient *kube_client.ExtensionsClient) (*cache.StoreToIngressLister, error) {
+	lw := cache.NewListWatchFromClient(extensionsclient, "ingresses", kube_api.NamespaceAll, fields.Everything())
+	store := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
+	ingressLister := &cache.StoreToIngressLister{Indexer: store}
+	reflector := cache.NewReflector(lw, &kube_extensions.Ingress{}, store, time.Hour)
+	reflector.Run()
+	return ingressLister, nil
+}
+
+func getReplicationControllerLister(kubeClient *kube_client.Client) (*cache.StoreToReplicationControllerLister, error) {
+	lw := cache.NewListWatchFromClient(kubeClient, "replicationcontrollers", kube_api.NamespaceAll, fields.Everything())
+	store := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
+	rcLister := &cache.StoreToReplicationControllerLister{Indexer: store}
+	reflector := cache.NewReflector(lw, &kube_api.ReplicationController{}, store, time.Hour)
+	reflector.Run()
+	return rcLister, nil
 }
 
 func getPodLister(kubeClient *kube_client.Client) (*cache.StoreToPodLister, error) {

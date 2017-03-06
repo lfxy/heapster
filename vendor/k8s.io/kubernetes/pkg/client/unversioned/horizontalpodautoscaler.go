@@ -20,6 +20,7 @@ import (
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/apis/autoscaling"
 	"k8s.io/kubernetes/pkg/watch"
+	//"github.com/golang/glog"
 )
 
 // HorizontalPodAutoscalersNamespacer has methods to work with HorizontalPodAutoscaler resources in a namespace
