@@ -26,6 +26,7 @@ import (
 	//"runtime/debug"
 	"k8s.io/kubernetes/pkg/client/cache"
 	"k8s.io/kubernetes/pkg/labels"
+	"strings"
 )
 
 const (
@@ -167,26 +168,36 @@ responseloop:
 	}
 
 
-	err := this.scrapeCustomMetrics(start, end, delayMs, timeoutTime, &response)
+	this.scrapeCustomMetrics(start, end, delayMs, timeoutTime, &response)
+	/*err := this.scrapeCustomMetrics(start, end, delayMs, timeoutTime, &response)
 	if err != nil {
 		glog.Warningf("Failed to get custom metrics %s", err)
-	}
+	}*/
 
 	for key, value := range response.MetricSets {
-		glog.V(2).Infof("czq sources/manager.go ScrapeMetrics key:%s-------s", key)
-		for metrickey, metricvalue := range value.MetricValues {
-			glog.V(2).Infof("czq mkey:%s, mvalue:%f", metrickey, metricvalue.FloatValue)
+		if strings.Contains(key, "accp") {
+			glog.V(2).Infof("czq sources/manager.go ScrapeMetrics key:%s-------s", key)
+			for metrickey, metricvalue := range value.MetricValues {
+				glog.V(2).Infof("czq mkey:%s, mvalue:%f", metrickey, metricvalue.FloatValue)
+			}
+			glog.V(2).Infof("czq sources/manager.go ScrapeMetrics key:%s-------e", key)
 		}
-		glog.V(2).Infof("czq sources/manager.go ScrapeMetrics key:%s-------e", key)
 	}
-	glog.V(1).Infof("ScrapeMetrics: time: %s size: %d", time.Since(startTime), len(response.MetricSets))
+	//glog.V(1).Infof("ScrapeMetrics: time: %s size: %d", time.Since(startTime), len(response.MetricSets))
 	for i, value := range latencies {
 		glog.V(1).Infof("   scrape  bucket %d: %d", i, value)
 	}
 	return &response
 }
 
-func (this *sourceManager) scrapeCustomMetrics(start, end time.Time, delayMs int, timeoutTime time.Time, response *DataBatch) error {
+func (this *sourceManager) scrapeCustomMetrics(start, end time.Time, delayMs int, timeoutTime time.Time, response *DataBatch)  {
+	err := this.scrapeMetricsNginx(start, end, delayMs, timeoutTime, response)
+	if err != nil {
+		glog.Warningf("Failed to get custom metrics %s", err)
+	}
+}
+
+func (this *sourceManager) scrapeMetricsNginx(start, end time.Time, delayMs int, timeoutTime time.Time, response *DataBatch) error {
 	var b_success = true
 	customsources := this.customProvider.GetMetricsSources()
 	if len(customsources) == 0 {
@@ -289,14 +300,14 @@ customresponseloop:
 		return fmt.Errorf("Get custom metrics failed for there are unavailable curstom resources")
 	}
 
-	glog.V(2).Infof("czq sources/manager.go ScrapeCustomMetrics old:%s, old_add:%s, end:%s:", this.oldCustomResult.Timestamp, this.oldCustomResult.Timestamp.Add(end.Sub(start) + time.Second * 5), end)
+	//glog.V(2).Infof("czq sources/manager.go ScrapeCustomMetrics old:%s, old_add:%s, end:%s:", this.oldCustomResult.Timestamp, this.oldCustomResult.Timestamp.Add(end.Sub(start) + time.Second * 5), end)
 	if this.oldCustomResult.Timestamp.Add(end.Sub(start) + time.Second * 5).After(end) {
 		labelSelector, _ := labels.Parse("")
 		pods, _ := this.podLister.List(labelSelector)
 		var podIpToName map[string]string
 		podIpToName = make(map[string]string)
 		for _, pod := range pods {
-			glog.V(2).Infof("czq podLister :%s, %s", pod.Name, pod.Status.PodIP)
+			//glog.V(2).Infof("czq podLister :%s, %s", pod.Name, pod.Status.PodIP)
 			podIpToName[pod.Status.PodIP] = PodKey(pod.Namespace, pod.Name)
 		}
 
@@ -326,12 +337,12 @@ customresponseloop:
 		return fmt.Errorf("The old custom metrics has no data or has time out")
 	}
 
-	for k1, v1 := range this.oldCustomResult.MetricSets {
+	/*for k1, v1 := range this.oldCustomResult.MetricSets {
 		glog.V(2).Infof("czq sources/manager.go ScrapeMetrics old CustomResult key:%s, v: %s", k1, *v1)
 	}
 	for k1, v1 := range customresponse.MetricSets {
 		glog.V(2).Infof("czq sources/manager.go ScrapeMetrics new CustomResult key:%s, v: %s", k1, *v1)
-	}
+	}*/
 	this.oldCustomResult = customresponse
 	return nil
 }
