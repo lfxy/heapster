@@ -150,7 +150,7 @@ type MetricsSource interface {
 
 // Provider of list of sources to be scaped.
 type MetricsSourceProvider interface {
-	GetMetricsSources() []MetricsSource
+	GetMetricsSources(name string) []MetricsSource
 }
 
 type DataSink interface {

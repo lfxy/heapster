@@ -376,7 +376,7 @@ type summaryProvider struct {
 	kubeletClient *kubelet.KubeletClient
 }
 
-func (this *summaryProvider) GetMetricsSources() []MetricsSource {
+func (this *summaryProvider) GetMetricsSources(name string) []MetricsSource {
 	sources := []MetricsSource{}
 	nodes, err := this.nodeLister.List()
 	if err != nil {

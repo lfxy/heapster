@@ -108,7 +108,7 @@ type DummyMetricsSourceProvider struct {
 	sources []core.MetricsSource
 }
 
-func (this *DummyMetricsSourceProvider) GetMetricsSources() []core.MetricsSource {
+func (this *DummyMetricsSourceProvider) GetMetricsSources(name string) []core.MetricsSource {
 	return this.sources
 }
 

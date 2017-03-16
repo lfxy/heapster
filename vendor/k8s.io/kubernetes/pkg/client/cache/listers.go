@@ -34,13 +34,14 @@ import (
 //add StoreToConfigmap
 
 type ConfigMapLister struct {
-	Indexer
+	//Indexer
+	Store
 }
 
 // List lists all ReplicaSets in the store.
 // TODO: converge on the interface in pkg/client
 func (s *ConfigMapLister) List(selector labels.Selector) (ret []*api.ConfigMap, err error) {
-	for _, c := range s.Indexer.List() {
+	for _, c := range s.Store.List() {
 		cm := c.(*api.ConfigMap)
 		if selector.Matches(labels.Set(cm.Labels)) {
 			ret = append(ret, cm)
@@ -50,37 +51,14 @@ func (s *ConfigMapLister) List(selector labels.Selector) (ret []*api.ConfigMap, 
 }
 
 type ConfigMapNamespaceLister struct {
-	indexer   Indexer
+	store   Store
 	namespace string
 }
 
 func (s ConfigMapNamespaceLister) List(selector labels.Selector) (ret []*api.ConfigMap, err error) {
-	if s.namespace == api.NamespaceAll {
-		for _, m := range s.indexer.List() {
-			cm := m.(*api.ConfigMap)
-			if selector.Matches(labels.Set(cm.Labels)) {
-				ret = append(ret, cm)
-			}
-		}
-		return ret, nil
-	}
-
-	key := &api.ConfigMap{ObjectMeta: api.ObjectMeta{Namespace: s.namespace}}
-	items, err := s.indexer.Index(NamespaceIndex, key)
-	if err != nil {
-		// Ignore error; do slow search without index.
-		glog.Warningf("can not retrieve list of objects using index : %v", err)
-		for _, m := range s.indexer.List() {
-			cm := m.(*api.ConfigMap)
-			if s.namespace == cm.Namespace && selector.Matches(labels.Set(cm.Labels)) {
-				ret = append(ret, cm)
-			}
-		}
-		return ret, nil
-	}
-	for _, m := range items {
+	for _, m := range s.store.List() {
 		cm := m.(*api.ConfigMap)
-		if selector.Matches(labels.Set(cm.Labels)) {
+		if s.namespace == cm.Namespace && selector.Matches(labels.Set(cm.Labels)) {
 			ret = append(ret, cm)
 		}
 	}
@@ -88,7 +66,7 @@ func (s ConfigMapNamespaceLister) List(selector labels.Selector) (ret []*api.Con
 }
 
 func (s ConfigMapNamespaceLister) Get(name string) (*api.ConfigMap, error) {
-	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
+	obj, exists, err := s.store.GetByKey(s.namespace + "/" + name)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +77,7 @@ func (s ConfigMapNamespaceLister) Get(name string) (*api.ConfigMap, error) {
 }
 
 func (s *ConfigMapLister) ConfigMaps(namespace string) ConfigMapNamespaceLister {
-	return ConfigMapNamespaceLister{s.Indexer, namespace}
+	return ConfigMapNamespaceLister{s.Store, namespace}
 }
 
 //add StoreToConfigmap

@@ -93,7 +93,7 @@ func (this *sourceManager) Name() string {
 func (this *sourceManager) ScrapeMetrics(start, end time.Time) *DataBatch {
 	//glog.V(2).Infof("czq sources/manager.go  ScrapeMetrics--------------s")
 	//glog.V(2).Infof("czq sources/manager.go ScrapeMetrics:\n%s", string(debug.Stack()))
-	sources := this.metricsSourceProvider.GetMetricsSources()
+	sources := this.metricsSourceProvider.GetMetricsSources("")
 	//glog.V(2).Infof("czq sources/manager.go  ScrapeMetrics--------------e:%d", len(sources))
 	glog.V(1).Infof("Scraping metrics start: %s, end: %s", start, end)
 
@@ -195,11 +195,16 @@ func (this *sourceManager) scrapeCustomMetrics(start, end time.Time, delayMs int
 	if err != nil {
 		glog.Warningf("Failed to get custom metrics %s", err)
 	}
+
+	/*err = this.scrapeMetricsHaproxy(start, end, delayMs, timeoutTime, response)
+	if err != nil {
+		glog.Warningf("Failed to get custom metrics %s", err)
+	}*/
 }
 
 func (this *sourceManager) scrapeMetricsNginx(start, end time.Time, delayMs int, timeoutTime time.Time, response *DataBatch) error {
 	var b_success = true
-	customsources := this.customProvider.GetMetricsSources()
+	customsources := this.customProvider.GetMetricsSources("nginx")
 	if len(customsources) == 0 {
 		return fmt.Errorf("No custom metrics sources and failed get custom metrics!")
 	}
@@ -347,6 +352,10 @@ customresponseloop:
 	return nil
 }
 
+func (this *sourceManager) scrapeMetricsHaproxy(start, end time.Time, delayMs int, timeoutTime time.Time, response *DataBatch) error {
+
+	return nil
+}
 func scrape(s MetricsSource, start, end time.Time) *DataBatch {
 	sourceName := s.Name()
 	startTime := time.Now()

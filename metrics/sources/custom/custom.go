@@ -18,7 +18,20 @@ import (
 	kube_api "k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/fields"
 	"k8s.io/kubernetes/pkg/client/cache"
+	//"k8s.io/kubernetes/pkg/client/restclient"
+
+	//"k8s.io/kubernetes/pkg/api/v1"
+	//"k8s.io/apimachinery/pkg/runtime"
+	//"k8s.io/kubernetes/pkg/runtime"
+	//api_fields "k8s.io/apimachinery/pkg/fields"
+	//metav1 "k8s.io/kubernetes/vendor/k8s.io/apimachinery/pkg/apis/meta/v1"
+	//api_fields "k8s.io/apimachinery/pkg/fields"
+	//metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	//"runtime/debug"
+	//"k8s.io/kubernetes/pkg/controller"
+	//"k8s.io/client-go/1.4/pkg/api"
+	//watch "k8s.io/client-go/1.4/pkg/watch"
+	//client_cache "k8s.io/client-go/tools/cache"
 )
 
 const (
@@ -42,6 +55,7 @@ type customProvider struct {
 	haproxyCustomClient			*HaproxyCustomClient
 	configMapNames				string
 }
+
 
 type NginxQpsMetricsSource struct {
 	lb					LbInfo
@@ -175,55 +189,57 @@ func (this *HaproxyQpsMetricsSource) decodeCustomData(custommetrics *map[string]
 	return result
 }
 
-func (this *customProvider) GetMetricsSources() []MetricsSource {
+func (this *customProvider) GetMetricsSources(name string) []MetricsSource {
 	sources := []MetricsSource{}
 	cmnames := strings.Split(this.configMapNames, ",")
 	for _, configmapname := range cmnames {
-		configmap, err := this.configMapNamespaceLister.Get(configmapname)
-		if err != nil {
-			glog.Errorf("error while listing configmap: %v", err)
-			continue
-		}
-		if configmap == nil {
-			glog.Error("No configmap received from APIserver.")
-			continue
-		}
+		if strings.Contains(configmapname, name) {
+			configmap, err := this.configMapNamespaceLister.Get(configmapname)
+			if err != nil {
+				glog.Errorf("error while listing configmap: %v", err)
+				continue
+			}
+			if configmap == nil {
+				glog.Error("No configmap received from APIserver.")
+				continue
+			}
 
-		if strips, exists := configmap.Data["cluster.ips"]; exists {
-			ips := strings.Split(strips, ",")
-			for _, ip := range ips {
-				glog.V(2).Infof("czq customProvider GetMetricsSources:%s", ip)
-				host := kubelet.Host{}
-				if strings.Contains(ip, ":") {
-					suburl := strings.Split(ip, ":")
-					host.IP = suburl[0]
-					iport, error := strconv.Atoi(suburl[1])
-					if error != nil{
-						glog.Errorf("NewCustomProvider port convert error! url:%s", ip)
-						continue
+			if strips, exists := configmap.Data["cluster.ips"]; exists {
+				ips := strings.Split(strips, ",")
+				for _, ip := range ips {
+					glog.V(2).Infof("czq customProvider GetMetricsSources:%s", ip)
+					host := kubelet.Host{}
+					if strings.Contains(ip, ":") {
+						suburl := strings.Split(ip, ":")
+						host.IP = suburl[0]
+						iport, error := strconv.Atoi(suburl[1])
+						if error != nil{
+							glog.Errorf("NewCustomProvider port convert error! url:%s", ip)
+							continue
+						}
+						host.Port = iport
+					} else {
+						host.IP = ip
+						host.Port = 80
 					}
-					host.Port = iport
-				} else {
-					host.IP = ip
-					host.Port = 80
-				}
 
-				info := LbInfo{
-					Host: kubelet.Host{
-						IP: host.IP,
-						Port: host.Port,
-					},
-					LbName: configmapname,
-				}
+					info := LbInfo{
+						Host: kubelet.Host{
+							IP: host.IP,
+							Port: host.Port,
+						},
+						LbName: configmapname,
+					}
 
-				if strings.Contains(configmapname, "nginx") {
-					sources = append(sources, NewNginxMetricsSource(info, this.nginxCustomClient))
-				} else if strings.Contains(configmapname, "haproxy") {
-					sources = append(sources, NewHaproxyMetricsSource(info, this.haproxyCustomClient))
+					if strings.Contains(configmapname, "nginx") {
+						sources = append(sources, NewNginxMetricsSource(info, this.nginxCustomClient))
+					} else if strings.Contains(configmapname, "haproxy") {
+						sources = append(sources, NewHaproxyMetricsSource(info, this.haproxyCustomClient))
+					}
 				}
 			}
 		}
-	}
+    }
 	return sources
 }
 
@@ -234,9 +250,18 @@ func NewCustomProvider(uri *url.URL, lbNames string) (MetricsSourceProvider, err
 	}
 	kubeClient := kube_client.NewOrDie(kubeConfig)
 
+
+	resyncPeriod := 60*time.Second
+
+	if strings.Contains(lbNames, "haproxy") {
+		hc, _ := NewHaproxyController(kubeClient, resyncPeriod, "kube-system", lbNames)
+		go hc.Run()
+	}
+
 	lw := cache.NewListWatchFromClient(kubeClient, "configmaps", kube_api.NamespaceAll, fields.Everything())
-	store := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
-	configMapLister := &cache.ConfigMapLister{Indexer: store}
+	//store := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
+	store := cache.NewStore(cache.MetaNamespaceKeyFunc)
+	configMapLister := &cache.ConfigMapLister{Store: store}
 	reflector := cache.NewReflector(lw, &kube_api.ConfigMap{}, store, time.Hour)
 	reflector.Run()
 
