@@ -368,7 +368,7 @@ func (this *HaproxyQpsMetricsSource) ScrapeMetrics(start, end time.Time) *DataBa
 	}
 
 	tmpret := make(map[string]float64)
-	testret := make(map[int]float64)
+	testret := make(map[string]map[int]float64)
 
 	for _, port := range haproxyPorts {
 		err := this.haproxyCustomClient.GetCustomMetrics(this.lb.Host.IP, port, &tmpret, &testret)
@@ -388,7 +388,11 @@ func (this *HaproxyQpsMetricsSource) ScrapeMetrics(start, end time.Time) *DataBa
 		glog.V(2).Infof("czq HaproxyQpsMetricsSource, ScrapeMetrics:%s:%f, ", k, v)
 	}
 	for k, v := range testret {
-		glog.V(2).Infof("czq HaproxyQpsMetricsSource, ScrapeMetrics:%d:%f, ", k, v)
+		glog.V(2).Infof("czq HaproxyQpsMetricsSource, ScrapeMetrics:%s:", k)
+		for k1, v1 := range v {
+			glog.V(2).Infof("%d:%f,", k1, v1)
+		}
+
 	}
 	return result
 }

@@ -89,7 +89,7 @@ func (self *NginxCustomClient) GetCustomMetrics(host kubelet.Host) (*map[string]
 	return &custommetrics, err
 }
 
-func (self *HaproxyCustomClient) postRequestAndGetValue(client *http.Client, req *http.Request, value *map[string]float64, testvalues *map[int]float64, port int) error {
+func (self *HaproxyCustomClient) postRequestAndGetValue(client *http.Client, req *http.Request, value *map[string]float64, testvalues *map[string]map[int]float64, port int) error {
 	response, err := client.Do(req)
 	if err != nil {
 		return err
@@ -132,25 +132,28 @@ func (self *HaproxyCustomClient) postRequestAndGetValue(client *http.Client, req
 			}
 			if metrics, exists := (*value)[key]; exists {
 				(*value)[key] = metrics + newvalue
+				(*testvalues)[key][port] = newvalue
 			} else {
 				(*value)[key] = newvalue
+				(*testvalues)[key] = make(map[int]float64)
+				(*testvalues)[key][port] = newvalue
 			}
 
 			//czq test
-			if strings.Contains(datas[i][0], "php-apache") {
+			/*if strings.Contains(datas[i][0], "php-apache") {
 				if _, exs := (*testvalues)[port]; exs {
 					glog.Errorf("error test test!!!!!")
 				} else {
 					(*testvalues)[port] = newvalue
 				}
-			}
+			}*/
 			//czq test
 		}
 	}
 	return nil
 }
 
-func (self *HaproxyCustomClient) GetCustomMetrics(ip string, port int, metricsvalues *map[string]float64, testvalues *map[int]float64) (error) {
+func (self *HaproxyCustomClient) GetCustomMetrics(ip string, port int, metricsvalues *map[string]float64, testvalues *map[string]map[int]float64) (error) {
 	url := url.URL {
 		Scheme:		"http",
 		Host:		fmt.Sprintf("%s:%d", ip, port),
