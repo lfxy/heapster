@@ -156,7 +156,7 @@ func main() {
 		glog.Fatalf("Failed to create nodeLister: %v", err)
 	}
 	//czq done 1
-	sourceManager, err := sources.NewSourceManager(sourceProvider, customProvider, sources.DefaultMetricsScrapeTimeout, podLister)
+	sourceManager, err := sources.NewSourceManager(sourceProvider, customProvider, sources.DefaultMetricsScrapeTimeout, podLister, lbNames)
 	if err != nil {
 		glog.Fatalf("Failed to create source manager: %v", err)
 	}

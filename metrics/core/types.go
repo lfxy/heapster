@@ -142,6 +142,11 @@ type CustomDataBatch struct {
 	MetricSets   map[string]CustomMetricSet
 }
 
+type ReloadTime struct {
+	LbName				string
+	LastReloadTime		time.Time
+	CurrentTime			time.Time
+}
 // A place from where the metrics should be scraped.
 type MetricsSource interface {
 	Name() string
@@ -151,6 +156,7 @@ type MetricsSource interface {
 // Provider of list of sources to be scaped.
 type MetricsSourceProvider interface {
 	GetMetricsSources(name string) []MetricsSource
+	GetReloadTime() (ReloadTime, error)
 }
 
 type DataSink interface {

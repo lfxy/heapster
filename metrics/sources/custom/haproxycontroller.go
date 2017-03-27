@@ -78,11 +78,11 @@ func NewHaproxyController(kubeClient *kube_client.Client, resyncPeriod time.Dura
 				&cache.ListWatch{
 					ListFunc: func(lo kube_api.ListOptions) (runtime.Object, error) {
 						lo.FieldSelector = configMapSelector
-						return kubeClient.ConfigMaps("kube-system").List(lo)
+						return kubeClient.ConfigMaps(customNamespace).List(lo)
 					},
 					WatchFunc: func(lo kube_api.ListOptions) (watch.Interface, error) {
 						lo.FieldSelector = configMapSelector
-						return kubeClient.ConfigMaps("kube-system").Watch(lo)
+						return kubeClient.ConfigMaps(customNamespace).Watch(lo)
 					},
 				},
 				&kube_api.ConfigMap{},

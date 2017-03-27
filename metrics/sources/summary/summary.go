@@ -376,6 +376,10 @@ type summaryProvider struct {
 	kubeletClient *kubelet.KubeletClient
 }
 
+func (this *summaryProvider) GetReloadTime() (ReloadTime, error) {
+	return ReloadTime{}, nil
+}
+
 func (this *summaryProvider) GetMetricsSources(name string) []MetricsSource {
 	sources := []MetricsSource{}
 	nodes, err := this.nodeLister.List()

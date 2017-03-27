@@ -259,6 +259,10 @@ type kubeletProvider struct {
 	kubeletClient *KubeletClient
 }
 
+func (this *kubeletProvider) GetReloadTime() (ReloadTime, error) {
+	return ReloadTime{}, nil
+}
+
 func (this *kubeletProvider) GetMetricsSources(name string) []MetricsSource {
 	sources := []MetricsSource{}
 	nodes, err := this.nodeLister.List()
