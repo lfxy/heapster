@@ -220,9 +220,12 @@ func (this *sourceManager) scrapeCustomMetrics(start, end time.Time, delayMs int
 		secondnum := reloadtime.CurrentTime.Sub(reloadtime.LastReloadTime).Seconds()
 
 		if secondnum < 3 {
-			glog.Warningf("haproxy reload time is too short and skip this time")
+			glog.Warningf("haproxy reload time is too short and skip this time:%s, %s", reloadtime.LastReloadTime.String(), reloadtime.CurrentTime.String())
 			this.oldHaproxyResult = DataBatch{Timestamp: time.Now().Add(-time.Hour * 1), MetricSets: map[string]*MetricSet{},}
 			return
+		}
+		if secondnum > 60 {
+			secondnum = 60
 		}
 		err = this.realScrapeMetrics(start, end, delayMs, timeoutTime, response, HaproxyLB, int(secondnum))
 		if err != nil {
@@ -347,15 +350,37 @@ customresponseloop:
 	}
 
 	//glog.V(2).Infof("czq sources/manager.go ScrapeCustomMetrics old:%s, old_add:%s, end:%s:", this.oldNginxResult.Timestamp, this.oldNginxResult.Timestamp.Add(end.Sub(start) + time.Second * 5), end)
-	if oldResult.Timestamp.Add(end.Sub(start) + time.Second * 5).After(end) {
-		labelSelector, _ := labels.Parse("")
-		pods, _ := this.podLister.List(labelSelector)
-		var podIpToName map[string]string
-		podIpToName = make(map[string]string)
-		for _, pod := range pods {
-			//glog.V(2).Infof("czq podLister :%s, %s", pod.Name, pod.Status.PodIP)
-			podIpToName[pod.Status.PodIP] = PodKey(pod.Namespace, pod.Name)
+
+	labelSelector, _ := labels.Parse("")
+	pods, _ := this.podLister.List(labelSelector)
+	var podIpToName map[string]string
+	podIpToName = make(map[string]string)
+	for _, pod := range pods {
+		//glog.V(2).Infof("czq podLister :%s, %s", pod.Name, pod.Status.PodIP)
+		podIpToName[pod.Status.PodIP] = PodKey(pod.Namespace, pod.Name)
+	}
+	if secondnum < 60 {
+		glog.V(2).Infof("czq realScrapeMetrics secondnum:%d < 60", secondnum)
+		for h_key, h_value := range customresponse.MetricSets {
+			if podname, pod_exist := podIpToName[h_key]; pod_exist {
+				responstvalue, r_exists := response.MetricSets[podname]
+				if r_exists {
+					for l_key, l_value := range h_value.MetricValues {
+						l_value.FloatValue = float32(l_value.CustomValue) / float32(secondnum)
+						responstvalue.MetricValues[CustomMetricPrefix + l_key] = l_value
+					}
+				} else {
+					glog.Warningf("this ip:%s does not exist in old values", h_key)
+				}
+			} else {
+				glog.Warningf("this ip:%s does not exist in pod list", h_key)
+			}
 		}
+		*oldResult = customresponse
+		return nil
+	}
+
+	if oldResult.Timestamp.Add(end.Sub(start) + time.Second * 5).After(end) {
 
 		for h_key, h_value := range customresponse.MetricSets {
 			if podname, pod_exist := podIpToName[h_key]; pod_exist {
@@ -365,16 +390,11 @@ customresponseloop:
 					for l_key, l_value := range h_value.MetricValues {
 						if l_oldvalue, l_exits := oldvalue.MetricValues[l_key]; l_exits {
 							if l_value.CustomValue < l_oldvalue.CustomValue {
+								glog.Warningf("this ip:%s new value is less than old values", h_key)
 								continue
 							}
-							if secondnum < 60 {
-								l_value.FloatValue = float32(l_value.CustomValue) / float32(secondnum)
-								responstvalue.MetricValues[CustomMetricPrefix + l_key] = l_value
-							} else {
-								secondnum = 60
-								l_value.FloatValue = float32(l_value.CustomValue - l_oldvalue.CustomValue) / float32(secondnum)
-								responstvalue.MetricValues[CustomMetricPrefix + l_key] = l_value
-							}
+							l_value.FloatValue = float32(l_value.CustomValue - l_oldvalue.CustomValue) / float32(secondnum)
+							responstvalue.MetricValues[CustomMetricPrefix + l_key] = l_value
 						}
 					}
 				} else {

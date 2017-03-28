@@ -390,7 +390,7 @@ func (this *HaproxyQpsMetricsSource) ScrapeMetrics(start, end time.Time) *DataBa
 	for k, v := range testret {
 		glog.V(2).Infof("czq HaproxyQpsMetricsSource, ScrapeMetrics:%s:", k)
 		for k1, v1 := range v {
-			glog.V(2).Infof("%d:%f,", k1, v1)
+			glog.V(2).Infof("%d:%f", k1, v1)
 		}
 
 	}
