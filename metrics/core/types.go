@@ -156,7 +156,7 @@ type MetricsSource interface {
 // Provider of list of sources to be scaped.
 type MetricsSourceProvider interface {
 	GetMetricsSources(name string) []MetricsSource
-	GetReloadTime() (ReloadTime, error)
+	GetReloadTime(configmapname string) (ReloadTime, error)
 }
 
 type DataSink interface {

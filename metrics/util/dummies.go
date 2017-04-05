@@ -108,7 +108,7 @@ type DummyMetricsSourceProvider struct {
 	sources []core.MetricsSource
 }
 
-func (this *DummyMetricsSourceProvider) GetReloadTime() (core.ReloadTime, error) {
+func (this *DummyMetricsSourceProvider) GetReloadTime(configmapname string) (core.ReloadTime, error) {
 	return core.ReloadTime{}, nil
 }
 

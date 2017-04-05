@@ -259,7 +259,7 @@ type kubeletProvider struct {
 	kubeletClient *KubeletClient
 }
 
-func (this *kubeletProvider) GetReloadTime() (ReloadTime, error) {
+func (this *kubeletProvider) GetReloadTime(configmapname string) (ReloadTime, error) {
 	return ReloadTime{}, nil
 }
 

@@ -59,27 +59,28 @@ var (
 	)
 )
 
-type lbtype int
-
-const (
-	NginxLB	lbtype = iota
-	HaproxyLB
-)
-
 func init() {
 	prometheus.MustRegister(lastScrapeTimestamp)
 	prometheus.MustRegister(scraperDuration)
 }
 
 func NewSourceManager(metricsSourceProvider MetricsSourceProvider, customProvider MetricsSourceProvider, metricsScrapeTimeout time.Duration, podLister *cache.StoreToPodLister, lbNames string) (MetricsSource, error) {
+	haproxydata := make(map[string]DataBatch)
+	cmnames := strings.Split(lbNames, ",")
+	for _, configmapname := range cmnames {
+		//if strings.Contains(configmapname, "haproxy") {
+		haproxydata[configmapname] = DataBatch{Timestamp: time.Now().Add(-time.Hour * 1), MetricSets: map[string]*MetricSet{},}
+		//}
+	}
 	return &sourceManager{
 		metricsSourceProvider: metricsSourceProvider,
 		customProvider:		   customProvider,
 		metricsScrapeTimeout:  metricsScrapeTimeout,
 		podLister:			   podLister,
-		oldNginxResult:		   DataBatch{Timestamp: time.Now().Add(-time.Hour * 1), MetricSets: map[string]*MetricSet{},},
-		oldHaproxyResult:	   DataBatch{Timestamp: time.Now().Add(-time.Hour * 1), MetricSets: map[string]*MetricSet{},},
+		//oldNginxResult:		   DataBatch{Timestamp: time.Now().Add(-time.Hour * 1), MetricSets: map[string]*MetricSet{},},
+		oldLBResult:	   haproxydata,
 		lbNames:			   lbNames,
+		//oldHaproxyResult:	   DataBatch{Timestamp: time.Now().Add(-time.Hour * 1), MetricSets: map[string]*MetricSet{},},
 		//rcLister:			   rcLister,
 		//ingressLister:			   ingressLister,
 	}, nil
@@ -90,8 +91,8 @@ type sourceManager struct {
     customProvider MetricsSourceProvider
 	metricsScrapeTimeout  time.Duration
 	podLister  *cache.StoreToPodLister
-	oldNginxResult DataBatch
-	oldHaproxyResult DataBatch
+	//oldNginxResult DataBatch
+	oldLBResult map[string]DataBatch
 	lbNames string
 	//rcLister *cache.StoreToReplicationControllerLister
 	//ingressLister *cache.StoreToIngressLister
@@ -202,46 +203,46 @@ responseloop:
 }
 
 func (this *sourceManager) scrapeCustomMetrics(start, end time.Time, delayMs int, timeoutTime time.Time, response *DataBatch)  {
-	if strings.Contains(this.lbNames, "nginx") {
-		err := this.realScrapeMetrics(start, end, delayMs, timeoutTime, response, NginxLB, 60)
-		if err != nil {
-			glog.Warningf("Failed to get custom metrics %s", err)
+	//if strings.Contains(this.lbNames, "haproxy") {
+	for lbName, _ := range this.oldLBResult {
+		glog.V(2).Infof("czq sources/manager.go scrapeCustomMetrics lbname:%s", lbName)
+		if strings.Contains(lbName, "nginx") {
+			err := this.realScrapeMetrics(start, end, delayMs, timeoutTime, response, 60, lbName)
+			if err != nil {
+				glog.Warningf("Failed to get custom metrics %s", err)
+			}
+			continue
 		}
-	}
 
-	if strings.Contains(this.lbNames, "haproxy") {
-		reloadtime, err := this.customProvider.GetReloadTime()
+		reloadtime, err := this.customProvider.GetReloadTime(lbName)
 		if err != nil {
 			glog.Errorf("Failed to get haproxy reload time: %v", err)
-			this.oldHaproxyResult = DataBatch{Timestamp: time.Now().Add(-time.Hour * 1), MetricSets: map[string]*MetricSet{},}
-			return
+			this.oldLBResult[lbName] = DataBatch{Timestamp: time.Now().Add(-time.Hour * 1), MetricSets: map[string]*MetricSet{},}
+			continue
 		}
 
 		secondnum := reloadtime.CurrentTime.Sub(reloadtime.LastReloadTime).Seconds()
 
 		if secondnum < 3 {
-			glog.Warningf("haproxy reload time is too short and skip this time:%s, %s", reloadtime.LastReloadTime.String(), reloadtime.CurrentTime.String())
-			this.oldHaproxyResult = DataBatch{Timestamp: time.Now().Add(-time.Hour * 1), MetricSets: map[string]*MetricSet{},}
-			return
+			glog.Warningf("haproxy:%s reload time is too short and skip this time:%s, %s", lbName, reloadtime.LastReloadTime.String(), reloadtime.CurrentTime.String())
+			this.oldLBResult[lbName] = DataBatch{Timestamp: time.Now().Add(-time.Hour * 1), MetricSets: map[string]*MetricSet{},}
+			continue
 		}
 		if secondnum > 60 {
 			secondnum = 60
 		}
-		err = this.realScrapeMetrics(start, end, delayMs, timeoutTime, response, HaproxyLB, int(secondnum))
+		err = this.realScrapeMetrics(start, end, delayMs, timeoutTime, response, int(secondnum), lbName)
 		if err != nil {
 			glog.Warningf("Failed to get custom metrics %s", err)
 		}
 	}
 }
 
-func (this *sourceManager) realScrapeMetrics(start, end time.Time, delayMs int, timeoutTime time.Time, response *DataBatch, lb lbtype, secondnum int) error {
+func (this *sourceManager) realScrapeMetrics(start, end time.Time, delayMs int, timeoutTime time.Time, response *DataBatch, secondnum int, lbName string) error {
 	var b_success = true
 	var customsources []MetricsSource
-	if lb == NginxLB {
-		customsources = this.customProvider.GetMetricsSources("nginx")
-	} else if lb == HaproxyLB {
-		customsources = this.customProvider.GetMetricsSources("haproxy")
-	}
+	customsources = this.customProvider.GetMetricsSources(lbName)
+
 	if len(customsources) == 0 {
 		return fmt.Errorf("No custom metrics sources and failed get custom metrics!")
 	}
@@ -342,12 +343,8 @@ customresponseloop:
 		return fmt.Errorf("Get custom metrics failed for there are unavailable curstom resources")
 	}
 
-	var oldResult *DataBatch
-	if lb == NginxLB {
-		oldResult = &this.oldNginxResult
-	} else if lb == HaproxyLB {
-		oldResult = &this.oldHaproxyResult
-	}
+	var oldResult DataBatch
+	oldResult = this.oldLBResult[lbName]
 
 	//glog.V(2).Infof("czq sources/manager.go ScrapeCustomMetrics old:%s, old_add:%s, end:%s:", this.oldNginxResult.Timestamp, this.oldNginxResult.Timestamp.Add(end.Sub(start) + time.Second * 5), end)
 
@@ -376,12 +373,12 @@ customresponseloop:
 				glog.Warningf("this ip:%s does not exist in pod list", h_key)
 			}
 		}
-		*oldResult = customresponse
+		//*oldResult = customresponse
+		this.oldLBResult[lbName] = customresponse
 		return nil
 	}
 
 	if oldResult.Timestamp.Add(end.Sub(start) + time.Second * 5).After(end) {
-
 		for h_key, h_value := range customresponse.MetricSets {
 			if podname, pod_exist := podIpToName[h_key]; pod_exist {
 				responstvalue, r_exists := response.MetricSets[podname]
@@ -393,6 +390,7 @@ customresponseloop:
 								glog.Warningf("this ip:%s new value is less than old values", h_key)
 								continue
 							}
+							glog.V(2).Infof("this ip:%s old_value:%f, new_value:%f, timestamp:%d", h_key, l_oldvalue.CustomValue, l_value.CustomValue, secondnum)
 							l_value.FloatValue = float32(l_value.CustomValue - l_oldvalue.CustomValue) / float32(secondnum)
 							responstvalue.MetricValues[CustomMetricPrefix + l_key] = l_value
 						}
@@ -405,7 +403,8 @@ customresponseloop:
 			}
 		}
 	} else {
-		*oldResult = customresponse
+		//*oldResult = customresponse
+		this.oldLBResult[lbName] = customresponse
 		return fmt.Errorf("The old custom metrics has no data or has time out")
 	}
 
@@ -415,7 +414,8 @@ customresponseloop:
 	for k1, v1 := range customresponse.MetricSets {
 		glog.V(2).Infof("czq sources/manager.go ScrapeMetrics new CustomResult key:%s, v: %s", k1, *v1)
 	}*/
-	*oldResult = customresponse
+	//*oldResult = customresponse
+	this.oldLBResult[lbName] = customresponse
 	return nil
 }
 
@@ -436,153 +436,3 @@ func scrape(s MetricsSource, start, end time.Time) *DataBatch {
 	return s.ScrapeMetrics(start, end)
 }
 
-
-/*func (this *sourceManager) scrapeMetricsNginx(start, end time.Time, delayMs int, timeoutTime time.Time, response *DataBatch) error {
-	var b_success = true
-	customsources := this.customProvider.GetMetricsSources("nginx")
-	if len(customsources) == 0 {
-		return fmt.Errorf("No custom metrics sources and failed get custom metrics!")
-	}
-	customResponseChannel := make(chan *DataBatch)
-	for _, customsource := range customsources {
-		go func(source MetricsSource, channel chan *DataBatch, start, end, timeoutTime time.Time, delayInMs int) {
-
-			// Prevents network congestion.
-			time.Sleep(time.Duration(rand.Intn(delayMs)) * time.Millisecond)
-
-			//metrics := scrape(source, start, end)
-			customemetrics := source.ScrapeMetrics(start, end)
-			now := time.Now()
-			if !now.Before(timeoutTime) {
-				b_success = false
-				glog.Warningf("Failed to get %s response in time", source)
-				return
-			}
-			timeForResponse := timeoutTime.Sub(now)
-
-			select {
-			case channel <- customemetrics:
-				// passed the response correctly.
-				return
-			case <-time.After(timeForResponse):
-				glog.Warningf("Failed to send the response back %s", source)
-				b_success = false
-				return
-			}
-		}(customsource, customResponseChannel, start, end, timeoutTime, delayMs)
-
-	}
-
-	customresponse := DataBatch{
-		Timestamp:  end,
-		MetricSets: map[string]*MetricSet{},
-	}
-customresponseloop:
-	for i := range customsources {
-		now := time.Now()
-		if !now.Before(timeoutTime) {
-			glog.Warningf("Failed to get all responses in time (got %d/%d)", i, len(customsources))
-			b_success = false
-			break
-		}
-
-		select {
-		case customDataBatch := <-customResponseChannel:
-			if customDataBatch != nil && len(customDataBatch.MetricSets) > 0 {
-				for h_key, h_value := range customDataBatch.MetricSets {
-					oldvalue, exists := customresponse.MetricSets[h_key]
-					if exists {
-						for l_key, l_value := range h_value.MetricValues {
-							l_oldvalue, l_exits := oldvalue.MetricValues[l_key]
-							if l_exits {
-								mv := l_oldvalue
-								mv.CustomValue += l_value.CustomValue
-								oldvalue.MetricValues[l_key] = mv
-							} else {
-								mv := MetricValue{
-									MetricType: l_value.MetricType,
-									ValueType:  l_value.ValueType,
-									CustomValue: l_value.CustomValue,
-								}
-
-								customresponse.MetricSets[h_key].MetricValues[l_key] = mv
-							}
-						}
-					} else {
-						ms := &MetricSet{
-							MetricValues: map[string]MetricValue{},
-						}
-						for l_key, l_value := range h_value.MetricValues {
-							mv := MetricValue{
-								MetricType: l_value.MetricType,
-								ValueType: l_value.ValueType,
-								CustomValue: l_value.CustomValue,
-							}
-							ms.MetricValues[l_key] = mv
-						}
-						customresponse.MetricSets[h_key] = ms
-					}
-
-				}
-			} else {
-				b_success = false
-				break customresponseloop
-			}
-
-		case <-time.After(timeoutTime.Sub(now)):
-			glog.Warningf("Failed to get custom responses in time (got %d/%d)", i, len(customsources))
-			b_success = false
-			break customresponseloop
-		}
-	}
-
-	if !b_success {
-		return fmt.Errorf("Get custom metrics failed for there are unavailable curstom resources")
-	}
-
-	//glog.V(2).Infof("czq sources/manager.go ScrapeCustomMetrics old:%s, old_add:%s, end:%s:", this.oldNginxResult.Timestamp, this.oldNginxResult.Timestamp.Add(end.Sub(start) + time.Second * 5), end)
-	if this.oldNginxResult.Timestamp.Add(end.Sub(start) + time.Second * 5).After(end) {
-		labelSelector, _ := labels.Parse("")
-		pods, _ := this.podLister.List(labelSelector)
-		var podIpToName map[string]string
-		podIpToName = make(map[string]string)
-		for _, pod := range pods {
-			//glog.V(2).Infof("czq podLister :%s, %s", pod.Name, pod.Status.PodIP)
-			podIpToName[pod.Status.PodIP] = PodKey(pod.Namespace, pod.Name)
-		}
-
-		for h_key, h_value := range customresponse.MetricSets {
-			if podname, pod_exist := podIpToName[h_key]; pod_exist {
-				responstvalue, r_exists := response.MetricSets[podname]
-				oldvalue, c_oldexists := this.oldNginxResult.MetricSets[h_key]
-				if c_oldexists && r_exists {
-					for l_key, l_value := range h_value.MetricValues {
-						if l_oldvalue, l_exits := oldvalue.MetricValues[l_key]; l_exits {
-							if l_value.CustomValue < l_oldvalue.CustomValue {
-								continue
-							}
-							l_value.FloatValue = float32(l_value.CustomValue - l_oldvalue.CustomValue) / float32(60)
-							responstvalue.MetricValues[CustomMetricPrefix + l_key] = l_value
-						}
-					}
-				} else {
-					glog.Warningf("this ip:%s does not exist in old values", h_key)
-				}
-			} else {
-				glog.Warningf("this ip:%s does not exist in pod list", h_key)
-			}
-		}
-	} else {
-		this.oldNginxResult = customresponse
-		return fmt.Errorf("The old custom metrics has no data or has time out")
-	}
-
-//	for k1, v1 := range this.oldNginxResult.MetricSets {
-//		glog.V(2).Infof("czq sources/manager.go ScrapeMetrics old CustomResult key:%s, v: %s", k1, *v1)
-//	}
-//	for k1, v1 := range customresponse.MetricSets {
-//		glog.V(2).Infof("czq sources/manager.go ScrapeMetrics new CustomResult key:%s, v: %s", k1, *v1)
-	//}
-	this.oldNginxResult = customresponse
-	return nil
-}*/

@@ -118,52 +118,45 @@ func (this *customProvider) GetMetricsSources(name string) []MetricsSource {
 	return sources
 }
 
-func (this *customProvider) GetReloadTime() (ReloadTime, error) {
+func (this *customProvider) GetReloadTime(configmapname string) (ReloadTime, error) {
 	rt := ReloadTime {
-		LbName:		"haproxy",
+		LbName:		configmapname,
 	}
 
 	host := kubelet.Host{
 		IP:		"",
 		Port:	-1,
 	}
-	cmnames := strings.Split(this.configMapNames, ",")
-	for _, configmapname := range cmnames {
-		if strings.Contains(configmapname, "haproxy") {
-			configmap, err := this.configMapNamespaceLister.Get(configmapname)
-			if err != nil {
-				glog.Errorf("error while listing configmap: %v", err)
-				continue
-			}
-			if configmap == nil {
-				glog.Errorf("No configmap received from APIserver.")
-				continue
-			}
 
-			if strips, exists := configmap.Data["cluster.ips"]; exists {
-				ips := strings.Split(strips, ",")
-				for _, ip := range ips {
-					glog.V(2).Infof("czq customProvider GetReloadTime:%s", ip)
-					if strings.Contains(ip, ":") {
-						suburl := strings.Split(ip, ":")
-						host.IP = suburl[0]
-						iport, error := strconv.Atoi(suburl[1])
-						if error != nil{
-							glog.Errorf("NewCustomProvider port convert error! url:%s", ip)
-							continue
-						}
-						host.Port = iport
-					} else {
-						host.IP = ip
-						host.Port = nginxControllerPort
-					}
+	configmap, err := this.configMapNamespaceLister.Get(configmapname)
+	if err != nil {
+		return rt, err
+	}
+	if configmap == nil {
+		return rt, fmt.Errorf("No configmap received from APIserver.")
+	}
 
-					break
+	if strips, exists := configmap.Data["cluster.ips"]; exists {
+		ips := strings.Split(strips, ",")
+		for _, ip := range ips {
+			glog.V(2).Infof("czq customProvider GetReloadTime:%s", ip)
+			if strings.Contains(ip, ":") {
+				suburl := strings.Split(ip, ":")
+				host.IP = suburl[0]
+				iport, error := strconv.Atoi(suburl[1])
+				if error != nil{
+					glog.Errorf("NewCustomProvider port convert error! url:%s", ip)
+					continue
 				}
+				host.Port = iport
+			} else {
+				host.IP = ip
+				host.Port = nginxControllerPort
 			}
+
 			break
 		}
-    }
+	}
 
 	if host.IP != "" {
 		mrt, err := this.haproxyReloadClient.GetReloadTime(host.IP, host.Port)
