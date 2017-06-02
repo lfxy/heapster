@@ -28,10 +28,6 @@ type Summary struct {
 	Pods []PodStats `json:"pods"`
 }
 
-type UserDefinedMetricItems struct {
-    UserDefinedMetrics map[string][]UserDefinedMetric `json:"userDefinedMetrics,omitmepty"`
-}
-
 // NodeStats holds node-level unprocessed sample stats.
 type NodeStats struct {
 	// Reference to the measured Node.
