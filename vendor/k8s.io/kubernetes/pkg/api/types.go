@@ -24,7 +24,6 @@ import (
 	"k8s.io/kubernetes/pkg/runtime"
 	"k8s.io/kubernetes/pkg/types"
 	"k8s.io/kubernetes/pkg/util/intstr"
-	//"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // Common string formats
@@ -2897,8 +2896,6 @@ type ConfigMapList struct {
 	// Items is the list of ConfigMaps.
 	Items []ConfigMap `json:"items"`
 }
-
-//func (obj *ConfigMapList) GetObjectKind() schema.ObjectKind { return &obj.TypeMeta }
 
 // These constants are for remote command execution and port forwarding and are
 // used by both the client side and server side components.
